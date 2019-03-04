@@ -150,6 +150,10 @@ func (p *portworx) Init(_ interface{}) error {
 		return fmt.Errorf("Failed to get k8s service spec: %v", err)
 	}
 
+	// serviceSecret: cluster UUID, shared secret
+	// now stork can gen it's own tokens only used for system calls
+	// Then i need to expand on the CRDs to support links to secret, to get user token
+
 	if len(endpoint) == 0 {
 		return fmt.Errorf("Failed to get endpoint for portworx volume driver")
 	}
