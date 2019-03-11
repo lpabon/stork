@@ -30,6 +30,10 @@ type Driver interface {
 	String() string
 
 	// InspectVolume returns information about a volume.
+	// XXX Caller context is needed. Who is the caller?
+	// We may assume that the caller is stork itself. If so, it needs to only
+	// be stork and no other, and must be documented here. May need another
+	// new API function called InspectVolumeWithSecret(map[string]string, volid)
 	InspectVolume(volumeID string) (*Info, error)
 
 	// GetNodes Get the list of nodes where the driver is available

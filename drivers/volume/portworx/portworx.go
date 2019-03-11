@@ -1,5 +1,10 @@
 package portworx
 
+// XXX The idea would be to use annotations to hold the secret name, just as
+// it is done for PVC in in-tree or CSI. A lot of the code to get the
+// secret name from the annotations and then get the content of the secret
+// is available already in OpenStorage
+
 import (
 	"encoding/csv"
 	"fmt"
@@ -96,6 +101,9 @@ const (
 
 	validateSnapshotTimeout       = 5 * time.Minute
 	validateSnapshotRetryInterval = 10 * time.Second
+
+	// XXX Annotations for secret name should be the same key as K8S PVC in
+	// OpenStorage and CSI
 )
 
 type cloudSnapStatus struct {
@@ -159,13 +167,21 @@ func (p *portworx) Init(_ interface{}) error {
 	}
 
 	logrus.Infof("Using %v as endpoint for portworx volume driver", endpoint)
+
+	// XXX Can no longer assume http. Must accept http or https
 	endpointPort := fmt.Sprintf("http://%v:%v", endpoint, apiPort)
+
+	// XXX It would be better to connect using gRPC
 	clnt, err := clusterclient.NewClusterClient(endpointPort, "v1")
 	if err != nil {
 		return err
 	}
 	p.clusterManager = clusterclient.ClusterManager(clnt)
 
+	// XXX Cannot initialize here. This assumes one token for all
+	// commands. Since stork will support both user and system token
+	// commands, the initialization of a client must be delayed until
+	// the correct token is taken.
 	clnt, err = volumeclient.NewDriverClient(endpointPort, "pxd", "", "stork")
 	if err != nil {
 		return err
@@ -217,6 +233,8 @@ func (p *portworx) startNodeCache() error {
 }
 
 func (p *portworx) InspectVolume(volumeID string) (*storkvolume.Info, error) {
+	// XXX Need context. Who is the caller? stork or the user?
+
 	vols, err := p.volDriver.Inspect([]string{volumeID})
 	if err != nil {
 		return nil, &ErrFailedToInspectVolume{
