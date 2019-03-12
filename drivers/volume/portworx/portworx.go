@@ -329,6 +329,7 @@ func (p *portworx) getNodeLabels(nodeInfo *storkvolume.NodeInfo) (map[string]str
 	return node.Labels, nil
 }
 
+// XXX system token
 func (p *portworx) GetNodes() ([]*storkvolume.NodeInfo, error) {
 	cluster, err := p.clusterManager.Enumerate()
 	if err != nil {
@@ -454,6 +455,7 @@ func (p *portworx) getSnapshotName(tags *map[string]string) string {
 	return "snapshot-" + (*tags)[snapshotter.CloudSnapshotCreatedForVolumeSnapshotUIDTag]
 }
 
+// XXX crd of volumesnapshot in annotation has the secret. User context
 func (p *portworx) SnapshotCreate(
 	snap *crdv1.VolumeSnapshot,
 	pv *v1.PersistentVolume,
@@ -581,6 +583,8 @@ func (p *portworx) SnapshotCreate(
 	}, &snapStatusConditions, nil
 }
 
+// XXX From Admin scope for now
+// this is triggered from the snapshot controller (we have a fork of this so we would need to make changes)
 func (p *portworx) SnapshotDelete(snapDataSrc *crdv1.VolumeSnapshotDataSource, _ *v1.PersistentVolume) error {
 	if snapDataSrc == nil || snapDataSrc.PortworxSnapshot == nil {
 		return fmt.Errorf("Invalid snapshot source %v", snapDataSrc)
@@ -638,6 +642,7 @@ func (p *portworx) SnapshotDelete(snapDataSrc *crdv1.VolumeSnapshotDataSource, _
 	}
 }
 
+// User context is in the pvc
 func (p *portworx) SnapshotRestore(
 	snapshotData *crdv1.VolumeSnapshotData,
 	pvc *v1.PersistentVolumeClaim,
@@ -818,6 +823,7 @@ func (p *portworx) GetSnapshotType(snap *crdv1.VolumeSnapshot) (string, error) {
 	return string(snapType), nil
 }
 
+// Called from snapshot controller. Use system token
 func (p *portworx) VolumeDelete(pv *v1.PersistentVolume) error {
 	if pv == nil || pv.Spec.PortworxVolume == nil {
 		return fmt.Errorf("Invalid PV: %v", pv)
@@ -1126,6 +1132,8 @@ func getCloudSnapStatusString(status *api.CloudBackupStatus) string {
 	return statusStr
 }
 
+// XXX Add to cluster pair two keys which, like annotations, point to the secret and namespace
+// which the user does not have access. This secret will hold the pairing token
 func (p *portworx) CreatePair(pair *stork_crd.ClusterPair) (string, error) {
 	ok, msg, err := p.ensureNodesHaveMinVersion("2.0")
 	if err != nil {
@@ -1148,7 +1156,9 @@ func (p *portworx) CreatePair(pair *stork_crd.ClusterPair) (string, error) {
 		}
 	}
 	resp, err := p.clusterManager.CreatePair(&api.ClusterPairCreateRequest{
-		RemoteClusterIp:    pair.Spec.Options["ip"],
+		RemoteClusterIp: pair.Spec.Options["ip"],
+		// XXX here we would be getting it from the secret instead
+		// if it is not there, then check for 'token'.
 		RemoteClusterToken: pair.Spec.Options["token"],
 		RemoteClusterPort:  uint32(port),
 	})
@@ -1158,10 +1168,12 @@ func (p *portworx) CreatePair(pair *stork_crd.ClusterPair) (string, error) {
 	return resp.RemoteClusterId, nil
 }
 
+// XXX Get token by the secret
 func (p *portworx) DeletePair(pair *stork_crd.ClusterPair) error {
 	return p.clusterManager.DeletePair(pair.Status.RemoteStorageID)
 }
 
+// XXX CRD has annotation with secret
 func (p *portworx) StartMigration(migration *stork_crd.Migration) ([]*stork_crd.VolumeInfo, error) {
 	ok, msg, err := p.ensureNodesHaveMinVersion("2.0")
 	if err != nil {
@@ -1238,6 +1250,7 @@ func (p *portworx) getMigrationTaskID(migration *stork_crd.Migration, volumeInfo
 	return string(migration.UID) + "-" + volumeInfo.Namespace + "-" + volumeInfo.PersistentVolumeClaim
 }
 
+// XXX secret passed in CRD
 func (p *portworx) GetMigrationStatus(migration *stork_crd.Migration) ([]*stork_crd.VolumeInfo, error) {
 	status, err := p.volDriver.CloudMigrateStatus(nil)
 	if err != nil {
@@ -1288,6 +1301,7 @@ func (p *portworx) GetMigrationStatus(migration *stork_crd.Migration) ([]*stork_
 	return migration.Status.Volumes, nil
 }
 
+// XXX token passed in migrate
 func (p *portworx) CancelMigration(migration *stork_crd.Migration) error {
 	for _, volumeInfo := range migration.Status.Volumes {
 		taskID := p.getMigrationTaskID(migration, volumeInfo)
@@ -1357,6 +1371,7 @@ func (p *portworx) CreateGroupSnapshot(snap *stork_crd.GroupVolumeSnapshot) (
 	}
 }
 
+// The crd will have the annotations to get the secret
 func (p *portworx) GetGroupSnapshotStatus(snap *stork_crd.GroupVolumeSnapshot) (
 	*storkvolume.GroupSnapshotCreateResponse, error) {
 	snapType, err := getSnapshotType(snap.Spec.Options)
@@ -1396,6 +1411,7 @@ func (p *portworx) DeleteGroupSnapshot(snap *stork_crd.GroupVolumeSnapshot) erro
 	return lastError
 }
 
+// CRD has annotations
 func (p *portworx) createGroupLocalSnapFromPVCs(groupSnap *stork_crd.GroupVolumeSnapshot, volNames []string, options map[string]string) (
 	*storkvolume.GroupSnapshotCreateResponse, error) {
 
@@ -1470,6 +1486,7 @@ func (p *portworx) createGroupLocalSnapFromPVCs(groupSnap *stork_crd.GroupVolume
 }
 
 // createGroupCloudSnapFromVolumes creates cloud group snapshots
+// XXX crd has annotations
 func (p *portworx) createGroupCloudSnapFromVolumes(
 	groupSnap *stork_crd.GroupVolumeSnapshot,
 	volNames []string,
@@ -1510,6 +1527,7 @@ func (p *portworx) getGroupCloudSnapStatus(snap *stork_crd.GroupVolumeSnapshot) 
 	return p.generateStatusReponseFromTaskIDs(snap, taskIDs, credID)
 }
 
+// In GroupVolumeSnapshot the annotations have the secret
 func (p *portworx) generateStatusReponseFromTaskIDs(
 	groupSnap *stork_crd.GroupVolumeSnapshot, taskIDs []string, credID string) (
 	*storkvolume.GroupSnapshotCreateResponse, error) {
@@ -1574,6 +1592,7 @@ func (p *portworx) generateStatusReponseFromTaskIDs(
 }
 
 // revertPXCloudSnaps deletes all cloudsnaps with given IDs
+// XXX Pretty much all delete use system token
 func (p *portworx) revertPXCloudSnaps(cloudSnapIDs []string, credID string) {
 	if len(cloudSnapIDs) == 0 {
 		return
@@ -1611,6 +1630,7 @@ func (p *portworx) ensureNodesHaveMinVersion(minVersionStr string) (bool, string
 		return false, "", err
 	}
 
+	// XXX System token
 	result, err := p.clusterManager.Enumerate()
 	if err != nil {
 		return false, "", err
