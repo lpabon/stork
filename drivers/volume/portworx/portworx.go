@@ -5,6 +5,11 @@ package portworx
 // secret name from the annotations and then get the content of the secret
 // is available already in OpenStorage
 
+// XXX FROM MEETING
+// 1. use env var from secrets
+// 2. use env var for https or not
+// 3. use system token for health
+
 import (
 	"encoding/csv"
 	"fmt"
