@@ -27,6 +27,7 @@ import (
 	core_v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/client-go/tools/record"
@@ -148,9 +149,18 @@ func run(c *cli.Context) {
 		log.Fatalf("Error initializing Stork Driver %v: %v", driverName, err)
 	}
 
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		log.Fatalf("Error getting cluster config: %v", err)
+	// Get KUBECONFIG
+	var config rest.Config
+	if kconfig := os.Getenv("KUBECONFIG"); len(kconfig) != 0 {
+		config, err = clientcmd.BuildConfigFromFlags("", kconfig)
+		if err != nil {
+			log.Fatalf("Error getting cluster config from %v: %v", kconfig, err)
+		}
+	} else {
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			log.Fatalf("Error getting cluster config: %v", err)
+		}
 	}
 
 	k8sClient, err := clientset.NewForConfig(config)
