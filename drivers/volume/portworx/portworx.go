@@ -559,9 +559,10 @@ func (p *portworx) getAdminVolDriver() (volume.VolumeDriver, error) {
 	secret := os.Getenv(pxSharedSecret)
 	if len(secret) != 0 {
 		claims := &auth.Claims{
-			Issuer: "stork.openstorage.io",
+			// XXX ADD BACK
+			Issuer: "openstorage.io",
 			Name:   "Stork",
-			Roles:  []string{"system.stork"},
+			Roles:  []string{"system.user"},
 		}
 
 		signature := &auth.Signature{
@@ -570,7 +571,7 @@ func (p *portworx) getAdminVolDriver() (volume.VolumeDriver, error) {
 		}
 
 		options := &auth.Options{
-			Expiration: time.Now().Add(time.Second * 30).Unix(),
+			Expiration: time.Now().Add(time.Hour).Unix(),
 		}
 
 		token, err := auth.Token(claims, signature, options)
