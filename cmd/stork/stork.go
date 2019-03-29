@@ -150,7 +150,7 @@ func run(c *cli.Context) {
 	}
 
 	// Get KUBECONFIG
-	var config rest.Config
+	var config *rest.Config
 	if kconfig := os.Getenv("KUBECONFIG"); len(kconfig) != 0 {
 		config, err = clientcmd.BuildConfigFromFlags("", kconfig)
 		if err != nil {

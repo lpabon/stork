@@ -177,11 +177,6 @@ func (p *portworx) Init(_ interface{}) error {
 	return p.startNodeCache()
 }
 
-func (p *portworx) Stop() error {
-	close(p.stopChannel)
-	return nil
-}
-
 func (p *portworx) initPortworxClients() error {
 	var endpoint string
 
