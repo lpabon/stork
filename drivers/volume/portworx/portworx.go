@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	jwt "github.com/dgrijalva/jwt-go"
 	version "github.com/hashicorp/go-version"
 	"github.com/heptio/ark/pkg/util/collections"
 	crdv1 "github.com/kubernetes-incubator/external-storage/snapshot/pkg/apis/crd/v1"
@@ -120,8 +119,6 @@ const (
 	pxSharedSecret = "PX_SHARED_SECRET"
 )
 
-var endpointPort string
-
 type cloudSnapStatus struct {
 	sourceVolumeID string
 	terminal       bool
@@ -155,12 +152,15 @@ var cloudsnapBackoff = wait.Backoff{
 }
 
 type portworx struct {
-	clusterManager cluster.Cluster
-	store          cache.Store
-	stopChannel    chan struct{}
-	restPort       int
-	sdkPort        int
-	authSecrets    auth_secrets.Auth
+	id              string
+	clusterManager  cluster.Cluster
+	store           cache.Store
+	stopChannel     chan struct{}
+	restPort        int
+	sdkPort         int
+	endpoint        string
+	jwtSharedSecret string
+	authSecrets     auth_secrets.Auth
 }
 
 func (p *portworx) String() string {
@@ -227,9 +227,9 @@ func (p *portworx) initPortworxClients() error {
 	} else {
 		scheme = "http"
 	}
-	endpointPort = fmt.Sprintf("%s://%v:%v", scheme, endpoint, p.restPort)
-	logrus.Infof("Using %s as the endpoint", endpointPort)
-	clnt, err := clusterclient.NewClusterClient(endpointPort, "v1")
+	p.endpoint = fmt.Sprintf("%s://%v:%v", scheme, endpoint, p.restPort)
+	logrus.Infof("Using %s as the endpoint", p.endpoint)
+	clnt, err := clusterclient.NewClusterClient(p.endpoint, "v1")
 	if err != nil {
 		return err
 	}
@@ -244,6 +244,15 @@ func (p *portworx) initPortworxClients() error {
 	ostsecrets, err := osecrets.New(nil)
 	if err != nil {
 		return err
+	}
+
+	// Save the token if any was given
+	p.jwtSharedSecret = os.Getenv(pxSharedSecret)
+
+	// Create a unique identifier
+	p.id, err = os.Hostname()
+	if err != nil {
+		return fmt.Errorf("Unable to get hostname: %v", err)
 	}
 
 	p.authSecrets, err = auth_secrets.NewAuth(auth_secrets.TypeK8s, ostsecrets)
@@ -498,6 +507,7 @@ func (p *portworx) GetPodVolumes(podSpec *v1.PodSpec, namespace string) ([]*stor
 
 		if volumeName != "" {
 			volumeInfo, err := p.InspectVolume(volumeName)
+			logrus.Debugf("GetPodVolumes: p.InspectVolume(%s) Error: %v", volumeName, err)
 			if err != nil {
 				// If the ispect volume fails return with atleast some info
 				volumeInfo = &storkvolume.Info{
@@ -535,14 +545,14 @@ func (p *portworx) getUserVolDriver(annotations map[string]string) (volume.Volum
 		if err != nil {
 			return nil, err
 		}
-		clnt, err := getClient(token, endpointPort)
+		clnt, err := p.getRestClientWithAuth(token)
 		if err != nil {
 			return nil, err
 		}
 		return volumeclient.VolumeDriver(clnt), nil
 	}
 
-	clnt, err := getClient("", endpointPort)
+	clnt, err := p.getRestClient()
 	if err != nil {
 		return nil, err
 	}
@@ -551,20 +561,30 @@ func (p *portworx) getUserVolDriver(annotations map[string]string) (volume.Volum
 }
 
 func (p *portworx) getAdminVolDriver() (volume.VolumeDriver, error) {
-	secret := os.Getenv(pxSharedSecret)
-	if len(secret) != 0 {
+	if len(p.jwtSharedSecret) != 0 {
 		claims := &auth.Claims{
 			// XXX ADD BACK
 			Issuer: "openstorage.io",
 			Name:   "Stork",
-			Roles:  []string{"system.user"},
+
+			// Unique id for stork
+			// this id must be unique across all accounts accessing the px system
+			Subject: "stork.openstorage.io." + p.id,
+
+			// Only allow certain calls
+			Roles: []string{"system.user"},
+
+			// Be in all groups to have access to all resources
+			Groups: []string{"*"},
 		}
 
-		signature := &auth.Signature{
-			Type: jwt.SigningMethodHS256,
-			Key:  []byte(secret),
+		// This never returns an error, but just in case, check the value
+		signature, err := auth.NewSignatureSharedSecret(p.jwtSharedSecret)
+		if err != nil {
+			return nil, err
 		}
 
+		// Set the token expiration
 		options := &auth.Options{
 			Expiration: time.Now().Add(time.Hour).Unix(),
 		}
@@ -574,25 +594,26 @@ func (p *portworx) getAdminVolDriver() (volume.VolumeDriver, error) {
 			return nil, err
 		}
 
-		clnt, err := getClient(token, endpointPort)
+		clnt, err := p.getRestClientWithAuth(token)
 		if err != nil {
 			return nil, err
 		}
 		return volumeclient.VolumeDriver(clnt), nil
 	}
 
-	clnt, err := getClient("", endpointPort)
+	clnt, err := p.getRestClient()
 	if err != nil {
 		return nil, err
 	}
 	return volumeclient.VolumeDriver(clnt), nil
 }
 
-func getClient(endpointPort string, token string) (*apiclient.Client, error) {
-	if len(token) != 0 {
-		return volumeclient.NewAuthDriverClient(endpointPort, "pxd", "", token, "", "stork")
-	}
-	return volumeclient.NewDriverClient(endpointPort, "pxd", "", "stork")
+func (p *portworx) getRestClientWithAuth(token string) (*apiclient.Client, error) {
+	return volumeclient.NewAuthDriverClient(p.endpoint, "pxd", "", token, "", "stork")
+}
+
+func (p *portworx) getRestClient() (*apiclient.Client, error) {
+	return volumeclient.NewDriverClient(p.endpoint, "pxd", "", "stork")
 }
 
 func (p *portworx) SnapshotCreate(
