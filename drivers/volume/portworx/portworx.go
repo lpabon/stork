@@ -55,9 +55,6 @@ import (
 
 // TODO: Make some of these configurable
 const (
-	// driverName is the name of the portworx driver implementation
-	driverName = "pxd"
-
 	// defaultServiceName is the default name of the portworx service
 	defaultServiceName = "portworx-service"
 
@@ -153,6 +150,11 @@ var cloudsnapBackoff = wait.Backoff{
 	Factor:   cloudSnapshotFactor,
 	Steps:    cloudSnapshotSteps,
 }
+
+var (
+	// driverName is the name of the portworx driver implementation
+	driverName = "pxd"
+)
 
 type portworx struct {
 	clusterManager  cluster.Cluster
@@ -657,11 +659,11 @@ func (p *portworx) getAdminVolDriver() (volume.VolumeDriver, error) {
 }
 
 func (p *portworx) getRestClientWithAuth(token string) (*apiclient.Client, error) {
-	return volumeclient.NewAuthDriverClient(p.endpoint, "pxd", "", token, "", "stork")
+	return volumeclient.NewAuthDriverClient(p.endpoint, driverName, "", token, "", "stork")
 }
 
 func (p *portworx) getRestClient() (*apiclient.Client, error) {
-	return volumeclient.NewDriverClient(p.endpoint, "pxd", "", "stork")
+	return volumeclient.NewDriverClient(p.endpoint, driverName, "", "stork")
 }
 
 func (p *portworx) SnapshotCreate(
