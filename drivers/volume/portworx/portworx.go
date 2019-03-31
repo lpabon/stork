@@ -158,7 +158,6 @@ var (
 
 type portworx struct {
 	clusterManager  cluster.Cluster
-	volDriver       volume.VolumeDriver
 	store           cache.Store
 	stopChannel     chan struct{}
 	restPort        int

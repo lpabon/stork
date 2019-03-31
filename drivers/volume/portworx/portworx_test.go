@@ -8,10 +8,14 @@ package portworx
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
+	crdv1 "github.com/kubernetes-incubator/external-storage/snapshot/pkg/apis/crd/v1"
+	v1 "k8s.io/api/core/v1"
+
 	"github.com/libopenstorage/openstorage/api"
 	volumeclient "github.com/libopenstorage/openstorage/api/client/volume"
 	"github.com/libopenstorage/openstorage/volume"
-	"github.com/stretchr/testify/assert"
 )
 
 func init() {
@@ -91,3 +95,30 @@ func TestInspectVolume(t *testing.T) {
 	assert.Len(t, info.Labels, 1)
 	assert.Contains(t, info.Labels, "hello")
 }
+
+/*
+func TestSnapshotCreate(t *testing.T) {
+	cl, err := volumeclient.NewAuthDriverClient(ostUrl, "fake", "v1", "", "", "fake")
+	assert.NoError(t, err)
+	driverclient := volumeclient.VolumeDriver(cl)
+
+	p := &portworx{
+		endpoint: ostUrl,
+	}
+
+	id := createVolume(t, "myvol", driverclient)
+	defer driverclient.Delete(id)
+
+	snapcrd := &crdv1.VolumeSnapshot{}
+	pv := &v1.PersistentVolume{
+		Spec: v1.PersistentVolumeSpec{
+			PersistemVolumeSource: v1.PersistentVolumeSource{
+				PortworxVolume: &v1.PortworxVolumeSource{
+					VolumeID: id,
+				},
+			},
+		},
+	}
+
+}
+*/
